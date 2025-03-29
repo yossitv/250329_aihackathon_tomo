@@ -1,0 +1,36 @@
+/* style.css */
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #111;
+}
+
+canvas {
+  display: block;
+}
+
+#videoElement {
+  display: none;
+}
+
+#errorMsg {
+  color: red;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: #000a;
+  padding: 10px;
+  border-radius: 4px;
+}
+
+#speechText {
+  color: #fff;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #222a;
+  padding: 10px;
+  border-radius: 4px;
+  max-width: 300px;
+  font-family: sans-serif;
+}
