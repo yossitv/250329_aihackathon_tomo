@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>右手ミギーデモ</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; overflow: hidden; background: #111; }
+    canvas { display: block; }
+    #videoElement { display: none; }
+    #errorMsg { color: red; position: absolute; top: 10px; left: 10px; background: #000a; padding: 10px; border-radius: 4px; z-index: 100; }
+    
+    /* チャットUIのスタイル */
+    #chatContainer {
+      position: absolute;
+      bottom: 70px;
+      right: 20px;
+      width: 350px;
+      height: 400px;
+      background: rgba(30, 30, 30, 0.8);
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+      z-index: 10;
+    }
+    
+    #chatHeader {
+      padding: 10px;
+      background: #333;
+      color: white;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    #minimize {
+      cursor: pointer;
+      user-select: none;
+    }
+    
+    #chatMessages {
+      flex-grow: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    .message {
+      max-width: 80%;
+      padding: 8px 12px;
+      border-radius: 15px;
+      word-break: break-word;
+    }
+    
+    .user-message {
+      align-self: flex-end;
+      background: #2b5278;
+      color: white;
+    }
+    
+    .bot-message {
+      align-self: flex-start;
+      background: #333;
+      color: white;
+    }
+    
+    #chatInputContainer {
+      display: flex;
+      padding: 10px;
+      background: #222;
+    }
+    
+    #chatInput {
+      flex-grow: 1;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 20px;
+      background: #444;
+      color: white;
+    }
+    
+    #chatInput:focus {
+      outline: none;
+    }
+    
+    #sendButton {
+      background: #2b5278;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      margin-left: 8px;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    #sendButton:hover {
+      background: #3c6ea5;
+    }
+    
+    #speechText {
+      color: #fff;
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: #222a;
+      padding: 10px;
+      border-radius: 4px;
+      max-width: 300px;
+    }
+
+    #minimizedChat {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      background: #2b5278;
+      color: white;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+      z-index: 10;
+    }
+    
+    /* 設定パネル */
+    #configPanel {
+      position: absolute;
+      top: 10px;
+      right: 20px;
+      background: rgba(30, 30, 30, 0.9);
+      padding: 15px;
+      border-radius: 8px;
+      z-index: 100;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    }
+    
+    #configPanel h3 {
+      margin-top: 0;
+      color: white;
+    }
+    
+    .configInput {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background: #333;
+      color: white;
+    }
+    
+    #saveConfig {
+      padding: 8px 12px;
+      background: #2b5278;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    #saveConfig:hover {
+      background: #3c6ea5;
+    }
+    
+    /* 現在のジェスチャー表示 */
+    #gestureIndicator {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      padding: 8px 12px;
+      background: rgba(30, 30, 30, 0.8);
+      color: white;
+      border-radius: 4px;
+      font-size: 14px;
+      z-index: 10;
+    }
+    
+    /* マイクボタン */
+    #micButton {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: #f44336;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+      z-index: 10;
+    }
+    
+    #micButton.listening {
+      animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.7);
+      }
+      70% {
+        box-shadow: 0 0 0 15px rgba(244, 67, 54, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(244, 67, 54, 0);
+      }
+    }
+    
+    #micIcon {
+      width: 30px;
+      height: 30px;
+      fill: white;
+    }
+  </style>
+  <!-- AWS SDK for JavaScript などは使わず、ここは Google Cloud TTS を利用するので不要 -->
+</head>
+<body>
+  <!-- ジェスチャーガイド（例示） -->
+  <div id="gestureGuide">
+    <h4>ジェスチャーガイド</h4>
+    <ul>
+      <li>✊: 怒り (fist)</li>
+      <li>✋: 通常 (palm)</li>
+      <li>👍: 褒める (thumbs_up)</li>
+      <li>☝️: 丁寧 (index)</li>
+      <li>🖕: 毒舌 (middle_finger)</li>
+    </ul>
+  </div>
+  <video id="videoElement" autoplay playsinline></video>
+  <div id="errorMsg"></div>
+  <div id="gestureIndicator">ジェスチャー: 通常</div>
+  <div id="speechText">音声認識中...</div>
+  
+  <!-- チャットUI -->
+  <div id="chatContainer">
+    <div id="chatHeader">
+      <span>右手ミギーとチャット</span>
+      <span id="minimize">−</span>
+    </div>
+    <div id="chatMessages"></div>
+    <div id="chatInputContainer">
+      <input type="text" id="chatInput" placeholder="メッセージを入力..." />
+      <button id="sendButton">↑</button>
+    </div>
+  </div>
+  
+  <div id="minimizedChat">💬</div>
+  
+  <!-- マイクボタン -->
+  <div id="micButton">
+    <svg id="micIcon" viewBox="0 0 24 24">
+      <path d="M12,2A3,3 0 0,1 15,5V11A3,3 0 0,1 12,14A3,3 0 0,1 9,11V5A3,3 0 0,1 12,2M19,11C19,14.53 16.39,17.44 13,17.93V21H11V17.93C7.61,17.44 5,14.53 5,11H7A5,5 0 0,0 12,16A5,5 0 0,0 17,11H19Z" />
+    </svg>
+  </div>
+  
+  <!-- 設定パネル -->
+  <div id="configPanel">
+    <h3>設定</h3>
+    <input type="text" id="openaiApiKeyInput" class="configInput" placeholder="OpenAI APIキーを入力" />
+    <input type="text" id="googleApiKeyInput" class="configInput" placeholder="Google Cloud APIキーを入力" />
+    <button id="saveConfig">保存</button>
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
+  
+  <script type="module">
+    // 設定パネルによるAPIキー管理
+    const openaiApiKeyInput = document.getElementById('openaiApiKeyInput');
+    const googleApiKeyInput = document.getElementById('googleApiKeyInput');
+    const saveConfig = document.getElementById('saveConfig');
+    
+    let openaiApiKey = localStorage.getItem('openai_api_key') || '';
+    let googleApiKey = localStorage.getItem('google_api_key') || '';
+    openaiApiKeyInput.value = openaiApiKey;
+    googleApiKeyInput.value = googleApiKey;
+    
+    saveConfig.addEventListener('click', () => {
+      openaiApiKey = openaiApiKeyInput.value.trim();
+      googleApiKey = googleApiKeyInput.value.trim();
+      localStorage.setItem('openai_api_key', openaiApiKey);
+      localStorage.setItem('google_api_key', googleApiKey);
+      alert('設定が保存されました');
+      document.getElementById('configPanel').style.display = 'none';
+    });
+    
+    // ----- ここから、ジェスチャーごとの音声設定とGoogle Cloud TTS 関数の追加 -----
+    const gestureSettings = {
+      fist: {
+        voiceName: "ja-JP-Wavenet-D",  // 怒りっぽい、重めの印象
+        prosody: {
+          pitch: "-9st",
+          rate: "slow",
+          volume: "loud"
+        }
+      },
+      palm: {
+        voiceName: "ja-JP-Wavenet-A",  // 標準的な声
+        prosody: {
+          pitch: "0st",
+          rate: "medium",
+          volume: "medium"
+        }
+      },
+      thumbs_up: {
+        voiceName: "ja-JP-Wavenet-B",  // 明るく元気な感じ
+        prosody: {
+          pitch: "+2st",
+          rate: "fast",
+          volume: "loud"
+        }
+      },
+      index: {
+        voiceName: "ja-JP-Wavenet-C",  // 丁寧で落ち着いた感じ
+        prosody: {
+          pitch: "+1st",
+          rate: "medium",
+          volume: "medium"
+        }
+      },
+      middle_finger: {
+        voiceName: "ja-JP-Wavenet-D",  // 強い怒りや皮肉を込めた感じ
+        prosody: {
+          pitch: "-3st",
+          rate: "slow",
+          volume: "loud"
+        }
+      },
+      thumbs_down: {
+        voiceName: "ja-JP-Wavenet-A",  // やや不満げな感じ
+        prosody: {
+          pitch: "0st",
+          rate: "slow",
+          volume: "medium"
+        }
+      }
+    };
+
+    async function speakWithGoogleTTS(text, googleApiKey, gesture) {
+      if (!googleApiKey) {
+        console.warn('Google Cloud APIキーが設定されていません');
+        return;
+      }
+      
+      const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${googleApiKey}`;
+      const settings = gestureSettings[gesture] || gestureSettings['palm'];
+      // SSML を利用して抑揚を設定
+      const ssmlText = `<speak><prosody pitch="${settings.prosody.pitch}" rate="${settings.prosody.rate}" volume="${settings.prosody.volume}">${text}</prosody></speak>`;
+      
+      const requestBody = {
+        input: { ssml: ssmlText },
+        voice: {
+          languageCode: "ja-JP",
+          name: settings.voiceName,
+          ssmlGender: settings.voiceName.includes("-D") ? "MALE" : "FEMALE"
+        },
+        audioConfig: {
+          audioEncoding: "MP3"
+        }
+      };
+
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody)
+        });
+        const data = await response.json();
+
+        if (data.audioContent) {
+          const audio = new Audio("data:audio/mp3;base64," + data.audioContent);
+          audio.play().catch(err => console.error("Audio play error:", err));
+        } else {
+          console.error("Google TTS から音声データが返されませんでした。", data);
+        }
+      } catch (error) {
+        console.error("Google Cloud TTS 呼び出しエラー:", error);
+      }
+    }
+    // ----- ここまで、ジェスチャーごとの音声設定と関数の追加 -----
+    
+    // ----- ここから、音声認識クラス -----
+    class SpeechRecognizer {
+      constructor(onTextCallback, onFinalCallback) {
+        this.onTextCallback = onTextCallback;
+        this.onFinalCallback = onFinalCallback;
+        this.recognition = null;
+      }
+
+      start() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+          this.onTextCallback('音声認識はこのブラウザでサポートされていません。');
+          return;
+        }
+    
+        this.recognition = new SpeechRecognition();
+        this.recognition.lang = 'ja-JP';
+        this.recognition.continuous = true;
+        this.recognition.interimResults = true;
+    
+        this.recognition.onresult = (event) => {
+          let interimTranscript = '';
+          let finalTranscript = '';
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              finalTranscript += transcript;
+            } else {
+              interimTranscript += transcript;
+            }
+          }
+          this.onTextCallback(finalTranscript || interimTranscript);
+          if (finalTranscript && this.onFinalCallback) {
+            this.onFinalCallback(finalTranscript);
+          }
+        };
+    
+        this.recognition.onerror = (event) => {
+          console.warn('Speech recognition error:', event);
+          this.recognition.stop();
+          document.getElementById('micButton').classList.remove('listening');
+        };
+    
+        this.recognition.start();
+        document.getElementById('micButton').classList.add('listening');
+      }
+    
+      stop() {
+        if (this.recognition) {
+          this.recognition.stop();
+          document.getElementById('micButton').classList.remove('listening');
+        }
+      }
+    
+      toggle() {
+        if (this.recognition && this.recognition.running) {
+          this.stop();
+        } else {
+          this.start();
+        }
+      }
+    }
+    // ----- ここまで、音声認識クラス -----
+    
+    // ----- ここから、ハンドジェスチャー検出クラス -----
+    class HandGestureDetector {
+      constructor(onGestureDetected) {
+        this.onGestureDetected = onGestureDetected;
+        this.lastGesture = null;
+        this.gestureStabilityCounter = 0;
+        this.lastNotifiedGesture = null;
+      }
+      
+      handleResults(landmarks) {
+        const gesture = this.detectGesture(landmarks);
+        if (gesture) {
+          if (gesture === this.lastGesture) {
+            this.gestureStabilityCounter++;
+            if (this.gestureStabilityCounter >= 5) {
+              if (this.onGestureDetected && gesture !== this.lastNotifiedGesture) {
+                this.onGestureDetected(gesture);
+                this.lastNotifiedGesture = gesture;
+              }
+            }
+          } else {
+            this.lastGesture = gesture;
+            this.gestureStabilityCounter = 0;
+          }
+        }
+      }
+      
+      detectGesture(landmarks) {
+        const isFingerBent = (tip, pip) => landmarks[tip].y > landmarks[pip].y;
+        const isThumbBent = () => landmarks[4].x > landmarks[2].x;
+        const thumbBent = isThumbBent();
+        const indexBent = isFingerBent(8, 6);
+        const middleBent = isFingerBent(12, 10);
+        const ringBent = isFingerBent(16, 14);
+        const pinkyBent = isFingerBent(20, 18);
+        
+        if (!thumbBent && indexBent && middleBent && ringBent && pinkyBent) {
+          return 'thumbs_up';
+        }
+        if (thumbBent && !indexBent && middleBent && ringBent && pinkyBent) {
+          return 'index';
+        }
+        if (thumbBent && indexBent && !middleBent && ringBent && pinkyBent) {
+          return 'middle_finger';
+        }
+        if (thumbBent && indexBent && middleBent && ringBent && !pinkyBent) {
+          return 'thumbs_down';
+        }
+        if (thumbBent && indexBent && middleBent && ringBent && pinkyBent) {
+          return 'fist';
+        }
+        if (!thumbBent && !indexBent && !middleBent && !ringBent && !pinkyBent) {
+          return 'palm';
+        }
+        return null;
+      }
+    }
+    // ----- ここまで、ハンドジェスチャー検出クラス -----
+    
+    // ----- ここから、LLM（OpenAI API）呼び出し関数 -----
+    async function getLLMResponse(userText, gesture = 'palm') {
+      const ENDPOINT = 'https://api.openai.com/v1/chat/completions';
+      if (!openaiApiKey) {
+        throw new Error('OpenAI APIキーが設定されていません。設定パネルからAPIキーを設定してください。');
+      }
+      
+      const tonePrompts = {
+        fist: 'あなたの怒りを込めた、熱く自然な口調で短めに返答してください。',
+        palm: '穏やかで優しい口調で、明るく前向きな返答をしてください。',
+        thumbs_up: 'とても喜んでいるように、親しみやすく元気な口調で返答してください。',
+        index: '落ち着いた口調で、丁寧かつ自然に説明するような返答をしてください。',
+        middle_finger: '少し皮肉を込めた、しかし自然な流れの攻撃的な口調で返答してください。',
+        thumbs_down: '上から目線ながらも、ユーモラスで自然な感じで返答してください。'
+      };
+      
+      const systemPrompt = tonePrompts[gesture] || tonePrompts['palm'];
+      
+      try {
+        const response = await fetch(ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${openaiApiKey}`
+          },
+          body: JSON.stringify({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              { role: 'system', content: `あなたは「右手ミギー」という寄生生物のキャラクターです。会話は簡潔に、ややふざけた態度で応答してください。${systemPrompt}` },
+              { role: 'user', content: userText }
+            ],
+            max_tokens: 150
+          })
+        });
+    
+        if (!response.ok) {
+          const errorData = await response.text();
+          console.error('LLM fetch failed:', errorData);
+          throw new Error(`API呼び出しエラー（ステータス: ${response.status}）`);
+        }
+    
+        const data = await response.json();
+        return data.choices[0].message.content;
+      } catch (error) {
+        console.error('Error in getLLMResponse:', error);
+        throw new Error('応答の取得中にエラーが発生しました: ' + error.message);
+      }
+    }
+    // ----- ここまで、LLM呼び出し関数 -----
+    
+    // DOM要素の取得
+    const videoElement = document.getElementById('videoElement');
+    const errorMsg = document.getElementById('errorMsg');
+    const speechText = document.getElementById('speechText');
+    const chatMessages = document.getElementById('chatMessages');
+    const chatInput = document.getElementById('chatInput');
+    const sendButton = document.getElementById('sendButton');
+    const micButton = document.getElementById('micButton');
+    const gestureIndicator = document.getElementById('gestureIndicator');
+    const minimize = document.getElementById('minimize');
+    const chatContainer = document.getElementById('chatContainer');
+    const minimizedChat = document.getElementById('minimizedChat');
+    
+    // チャットUI管理
+    minimize.addEventListener('click', () => {
+      chatContainer.style.display = 'none';
+      minimizedChat.style.display = 'flex';
+    });
+    
+    minimizedChat.addEventListener('click', () => {
+      chatContainer.style.display = 'flex';
+      minimizedChat.style.display = 'none';
+    });
+    
+    // マイクボタン処理
+    let speechRecognizer;
+    micButton.addEventListener('click', () => {
+      if (!speechRecognizer) {
+        speechRecognizer = new SpeechRecognizer(
+          (text) => {
+            speechText.textContent = text || '音声認識中...';
+          },
+          (finalText) => {
+            if (finalText.trim()) {
+              addMessage(finalText, 'user');
+              processUserInput(finalText);
+            }
+          }
+        );
+      }
+      speechRecognizer.toggle();
+    });
+    
+    // テキスト入力処理
+    sendButton.addEventListener('click', sendMessage);
+    chatInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+    
+    function sendMessage() {
+      const message = chatInput.value.trim();
+      if (message) {
+        addMessage(message, 'user');
+        processUserInput(message);
+        chatInput.value = '';
+      }
+    }
+    
+    function addMessage(text, sender) {
+      const messageElement = document.createElement('div');
+      messageElement.classList.add('message', sender + '-message');
+      messageElement.textContent = text;
+      chatMessages.appendChild(messageElement);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    // 現在のジェスチャー（初期値は "palm"）
+    let currentGesture = 'palm';
+    
+    // ユーザー入力処理
+    async function processUserInput(text) {
+      try {
+        const thinkingMsg = document.createElement('div');
+        thinkingMsg.classList.add('message', 'bot-message');
+        thinkingMsg.textContent = '考え中...';
+        chatMessages.appendChild(thinkingMsg);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        
+        const response = await getLLMResponse(text, currentGesture);
+        
+        chatMessages.removeChild(thinkingMsg);
+        addMessage(response, 'bot');
+        
+        // Google Cloud TTS により、currentGestureに応じた口調で読み上げ
+        speakWithGoogleTTS(response, googleApiKey, currentGesture);
+      } catch (error) {
+        console.error('Error processing input:', error);
+        addMessage('エラー: ' + error.message, 'bot');
+      }
+    }
+    
+    // Three.js関連の設定
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+    
+    const handGroup = new THREE.Group();
+    scene.add(handGroup);
+    
+    // キャラクターの目
+    const eyeGroup = new THREE.Group();
+    const eyeGeometry = new THREE.SphereGeometry(0.05, 32, 32);
+    const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const eye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+    
+    // 瞳孔
+    const pupilGeometry = new THREE.SphereGeometry(0.025, 32, 32);
+    const pupilMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const pupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+    pupil.position.z = 0.035;
+    eye.add(pupil);
+    eyeGroup.add(eye);
+    
+    // まぶた
+    const eyelidGeometry = new THREE.SphereGeometry(0.055, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    const eyelidMaterial = new THREE.MeshBasicMaterial({ color: 0x333333, side: THREE.DoubleSide });
+    const eyelid = new THREE.Mesh(eyelidGeometry, eyelidMaterial);
+    eyelid.rotation.x = Math.PI;
+    eyelid.position.z = 0.01;
+    eyelid.visible = false;
+    eyeGroup.add(eyelid);
+    
+    // 口
+    const mouthGroup = new THREE.Group();
+    const mouthGeometry = new THREE.CircleGeometry(0.03, 32);
+    const mouthMaterial = new THREE.MeshBasicMaterial({ color: 0xff3333 });
+    const mouth = new THREE.Mesh(mouthGeometry, mouthMaterial);
+    mouth.rotation.x = -Math.PI / 2;
+    mouthGroup.add(mouth);
+    
+    scene.add(eyeGroup);
+    scene.add(mouthGroup);
+    camera.position.z = 1;
+    
+    // MediaPipe Hands
+    const hands = new Hands({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7
+    });
+    
+    const joints = [];
+    for (let i = 0; i < 21; i++) {
+      const jointGeo = new THREE.SphereGeometry(0.01, 16, 16);
+      const jointMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.5 });
+      const joint = new THREE.Mesh(jointGeo, jointMat);
+      handGroup.add(joint);
+      joints.push(joint);
+    }
+    
+    let audioLevel = 0;
+    
+    const gestureDetector = new HandGestureDetector((gesture) => {
+      console.log('Detected gesture:', gesture);
+      currentGesture = gesture;
+      const gestureNames = {
+        fist: '✊ 怒り',
+        palm: '✋ 通常',
+        thumbs_up: '👍 褒める',
+        index: '☝️ 丁寧',
+        middle_finger: '🖕 毒舌',
+        thumbs_down: '👎 見下す'
+      };
+      gestureIndicator.textContent = 'ジェスチャー: ' + (gestureNames[gesture] || '不明');
+      
+      switch(gesture) {
+        case 'fist':
+          eyeMaterial.color.set(0xff0000);
+          break;
+        case 'palm':
+          eyeMaterial.color.set(0xffffff);
+          break;
+        case 'thumbs_up':
+          eyeMaterial.color.set(0x00ff00);
+          break;
+        case 'index':
+          eyeMaterial.color.set(0x00ffff);
+          break;
+        case 'middle_finger':
+          eyeMaterial.color.set(0xff00ff);
+          break;
+        case 'thumbs_down':
+          eyeMaterial.color.set(0x0000ff);
+          break;
+      }
+    });
+    
+    hands.onResults(results => {
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+        for (let i = 0; i < landmarks.length; i++) {
+          const lm = landmarks[i];
+          const x = (lm.x - 0.5) * 2;
+          const y = -(lm.y - 0.5) * 2;
+          const z = -lm.z;
+          joints[i].position.set(x, y, z);
+          joints[i].visible = true;
+        }
+        const middleFinger = landmarks[12];
+        const palm = landmarks[0];
+        eyeGroup.position.set((middleFinger.x - 0.5) * 2, -(middleFinger.y - 0.5) * 2, -middleFinger.z);
+        mouthGroup.position.set((palm.x - 0.5) * 1.7, -(palm.y - 0.5) * 0.6, -palm.z);
+        gestureDetector.handleResults(landmarks);
+      } else {
+        for (let i = 0; i < joints.length; i++) {
+          joints[i].visible = false;
+        }
+      }
+    });
+    
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        videoElement.srcObject = stream;
+    
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        source.connect(analyser);
+        analyser.fftSize = 128;
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    
+        const updateAudioLevel = () => {
+          analyser.getByteFrequencyData(dataArray);
+          const sum = dataArray.reduce((a, b) => a + b, 0);
+          audioLevel = sum / dataArray.length / 128;
+          requestAnimationFrame(updateAudioLevel);
+        };
+        updateAudioLevel();
+    
+        const cameraUtils = new Camera(videoElement, {
+          onFrame: async () => {
+            await hands.send({ image: videoElement });
+          },
+          width: 640,
+          height: 480,
+        });
+        cameraUtils.start();
+    
+        setTimeout(() => {
+          addMessage('こんにちは！右手ミギーです。何か話しかけてみてください。マイクボタンを押すか、テキストで入力できます！', 'bot');
+        }, 1000);
+      } catch (err) {
+        console.error('Failed to acquire camera/audio feed:', err);
+        errorMsg.textContent = 'カメラまたはマイクの使用が許可されていません。HTTPSでアクセスして、許可を確認してください。';
+      }
+    }
+    
+    startCamera();
+    
+    let blinkTimer = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+      const scale = Math.min(2.5, 0.5 + audioLevel * 3);
+      mouth.scale.y = scale;
+      blinkTimer++;
+      if (blinkTimer > 100) {
+        if (Math.random() < 0.02) {
+          eyelid.visible = true;
+          setTimeout(() => { eyelid.visible = false; }, 200);
+          blinkTimer = 0;
+        }
+      }
+      pupil.position.x = Math.sin(Date.now() * 0.001) * 0.01;
+      pupil.position.y = Math.cos(Date.now() * 0.0013) * 0.01;
+      renderer.render(scene, camera);
+    }
+    animate();
+    
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

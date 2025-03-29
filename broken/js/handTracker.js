@@ -6,6 +6,25 @@ export class HandTracker {
     this.onGestureDetected = onGestureDetected;
     this.hands = new Hands({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
 
+    // Three.jsの初期化を追加
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    this.renderer = new THREE.WebGLRenderer({ alpha: true });
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(this.renderer.domElement);
+    
+    // マーカー用の配列を初期化
+    this.joints = [];
+    for (let i = 0; i < 21; i++) {
+      const jointGeo = new THREE.SphereGeometry(0.01, 16, 16);
+      const jointMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+      const joint = new THREE.Mesh(jointGeo, jointMat);
+      this.scene.add(joint);
+      this.joints.push(joint);
+    }
+    
+    this.camera.position.z = 1;
+
     this.hands.setOptions({
       maxNumHands: 1,
       modelComplexity: 1,
@@ -32,6 +51,17 @@ export class HandTracker {
   handleResults(results) {
     if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
     const landmarks = results.multiHandLandmarks[0];
+    
+    // マーカーの位置を更新
+    for (let i = 0; i < landmarks.length; i++) {
+      const lm = landmarks[i];
+      const x = (lm.x - 0.5) * 2;
+      const y = -(lm.y - 0.5) * 2;
+      const z = -lm.z;
+      this.joints[i].position.set(x, y, z);
+    }
+    
+    // ジェスチャー検出の処理
     const gesture = this.detectGesture(landmarks);
     
     // ジェスチャーの安定性を確保するため、同じジェスチャーが数フレーム続いたら通知
@@ -49,6 +79,9 @@ export class HandTracker {
         this.gestureStabilityCounter = 0;
       }
     }
+    
+    // レンダリング
+    this.renderer.render(this.scene, this.camera);
   }
 
   detectGesture(landmarks) {
