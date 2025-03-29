@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>右手ミギーデモ</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #111;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #videoElement {
+      display: none;
+    }
+
+    #errorMsg {
+      color: red;
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: #000a;
+      padding: 10px;
+      border-radius: 4px;
+    }
+
+    #speechText {
+      color: #fff;
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #222a;
+      padding: 10px;
+      border-radius: 4px;
+      max-width: 300px;
+      font-family: sans-serif;
+    }
+  </style>
+</head>
+
+<body>
+  <video id="videoElement" autoplay playsinline></video>
+  <div id="errorMsg"></div>
+  <div id="speechText">...</div>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
+  <script>
+    const videoElement = document.getElementById('videoElement');
+    const errorMsg = document.getElementById('errorMsg');
+    const speechText = document.getElementById('speechText');
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const handGroup = new THREE.Group();
+    scene.add(handGroup);
+
+    const eyeGroup = new THREE.Group();
+    const mouthGroup = new THREE.Group();
+
+    const eyeGeometry = new THREE.SphereGeometry(0.05, 32, 32);
+    const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const eye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+    const pupilGeometry = new THREE.SphereGeometry(0.02, 32, 32);
+    const pupilMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const pupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+    pupil.position.z = 0.03;
+    eye.add(pupil);
+    eyeGroup.add(eye);
+
+    const mouthGeometry = new THREE.CircleGeometry(0.03, 32);
+    const mouthMaterial = new THREE.MeshBasicMaterial({ color: 0xff3333 });
+    const mouth = new THREE.Mesh(mouthGeometry, mouthMaterial);
+    mouth.rotation.x = -Math.PI / 2;
+    mouthGroup.add(mouth);
+
+    scene.add(eyeGroup);
+    scene.add(mouthGroup);
+    camera.position.z = 1;
+
+    const hands = new Hands({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7,
+    });
+
+    const joints = [];
+    for (let i = 0; i < 21; i++) {
+      const jointGeo = new THREE.SphereGeometry(0.01, 16, 16);
+      const jointMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+      const joint = new THREE.Mesh(jointGeo, jointMat);
+      handGroup.add(joint);
+      joints.push(joint);
+    }
+
+    let audioLevel = 0;
+
+    hands.onResults(results => {
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+        for (let i = 0; i < landmarks.length; i++) {
+          const lm = landmarks[i];
+          const x = (lm.x - 0.5) * 2;
+          const y = -(lm.y - 0.5) * 2;
+          const z = -lm.z;
+          joints[i].position.set(x, y, z);
+        }
+        const tip = landmarks[12];
+        const palm = landmarks[0];
+        eyeGroup.position.set((tip.x - 0.5) * 2, -(tip.y - 0.5) * 2, -tip.z);
+        mouthGroup.position.set((palm.x - 0.5) * 1.7, -(palm.y - 0.5) * 0.6, -palm.z);
+      }
+    });
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        videoElement.srcObject = stream;
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        source.connect(analyser);
+        analyser.fftSize = 128;
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        const updateAudioLevel = () => {
+          analyser.getByteFrequencyData(dataArray);
+          const sum = dataArray.reduce((a, b) => a + b, 0);
+          audioLevel = sum / dataArray.length / 128;
+          requestAnimationFrame(updateAudioLevel);
+        };
+        updateAudioLevel();
+
+        // 音声認識（SpeechRecognition API）
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        console.log(SpeechRecognition)
+        if (SpeechRecognition) {
+          const recognition = new SpeechRecognition();
+          recognition.lang = 'ja-JP';
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.onresult = (event) => {
+            let text = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              text += event.results[i][0].transcript;
+            }
+            speechText.textContent = text;
+          };
+          recognition.onerror = (event) => {
+            console.warn('Speech recognition error:', event);
+          };
+          recognition.start();
+        } else {
+          speechText.textContent = '音声認識はこのブラウザでサポートされていません。';
+        }
+
+        const cameraUtils = new Camera(videoElement, {
+          onFrame: async () => {
+            await hands.send({ image: videoElement });
+          },
+          width: 640,
+          height: 480,
+        });
+        cameraUtils.start();
+      } catch (err) {
+        console.error('Failed to acquire camera/audio feed:', err);
+        errorMsg.textContent = 'カメラまたはマイクの使用が許可されていません。HTTPSでアクセスして、許可を確認してください。';
+      }
+    }
+
+    startCamera();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const scale = Math.min(2.5, 0.5 + audioLevel * 3);
+      mouth.scale.y = scale;
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+
+</html>
